@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>git log --exam</title>
+<style>
+  :root {
+    --bg: #14161c;
+    --panel: #1a1d26;
+    --panel-border: #2a2d38;
+    --text: #e6e6ea;
+    --text-muted: #868a97;
+    --hash: #d9a441;
+    --add: #5cb86c;
+    --add-bg: rgba(92,184,108,0.14);
+    --add-border: rgba(92,184,108,0.4);
+    --del: #d9695f;
+    --del-bg: rgba(217,105,95,0.14);
+    --del-border: rgba(217,105,95,0.4);
+    --accent: #6e9fd6;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", "Liberation Mono", monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.5;
+  }
+  a { color: var(--accent); }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(20,22,28,0.96);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 12px 20px;
+  }
+  .prompt-line {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .prompt-line .sigil { color: var(--add); }
+  .prompt-line .cmd { color: var(--text); }
+  .prompt-line input {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    color: var(--hash);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    min-width: 160px;
+  }
+  .prompt-line input:focus { outline: 1px solid var(--accent); }
+  #name-error { color: var(--del); font-size: 12px; font-family: var(--mono); display: none; }
+
+  .graph-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--panel-border);
+    border: 1px solid var(--panel-border);
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  .dot:hover { transform: scale(1.3); }
+  .dot.answered { background: var(--accent); border-color: var(--accent); }
+  .dot.correct { background: var(--add); border-color: var(--add); }
+  .dot.wrong { background: var(--del); border-color: var(--del); }
+
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+  }
+
+  .section-divider {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--hash);
+    margin: 40px 0 18px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--panel-border);
+  }
+  .section-divider:first-child { margin-top: 0; }
+
+  .commit-block {
+    border-left: 3px solid var(--panel-border);
+    padding: 2px 0 2px 18px;
+    margin-bottom: 30px;
+    scroll-margin-top: 90px;
+  }
+  .commit-hash {
+    font-family: var(--mono);
+    color: var(--hash);
+    font-size: 12px;
+  }
+  .commit-hash::before { content: "commit "; color: var(--text-muted); }
+  .commit-points {
+    font-family: var(--mono);
+    color: var(--text-muted);
+    font-size: 12px;
+    float: right;
+  }
+  .commit-prompt {
+    font-size: 15.5px;
+    margin: 8px 0 12px;
+  }
+  .hint {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .option-line {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .option-line:hover { background: rgba(255,255,255,0.035); }
+  .option-line input { margin-top: 3px; accent-color: var(--accent); }
+  .option-line .gutter {
+    width: 12px;
+    text-align: center;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .option-line.selected { background: rgba(110,159,214,0.10); border-color: rgba(110,159,214,0.3); }
+  .option-line.correct { background: var(--add-bg); border-color: var(--add-border); }
+  .option-line.correct .gutter { color: var(--add); }
+  .option-line.wrong { background: var(--del-bg); border-color: var(--del-border); }
+  .option-line.wrong .gutter { color: var(--del); }
+  .option-line.disabled { cursor: default; }
+
+  .type-input {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    padding: 9px 12px;
+    border-radius: 4px;
+  }
+  .type-input:focus { outline: 1px solid var(--accent); }
+  .type-input.correct { border-color: var(--add-border); background: var(--add-bg); }
+  .type-input.wrong { border-color: var(--del-border); background: var(--del-bg); }
+  .canonical-answer {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+  .canonical-answer .label { color: var(--hash); }
+
+  .submit-bar {
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(to top, var(--bg) 60%, transparent);
+    padding: 24px 0 8px;
+    text-align: center;
+  }
+  button.primary {
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--add);
+    color: #0d1a10;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button.secondary {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--panel-border);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  button.secondary:hover { color: var(--text); border-color: var(--text-muted); }
+
+  .results-panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 22px;
+    margin: 30px 0;
+  }
+  .results-score {
+    font-family: var(--mono);
+    font-size: 34px;
+    color: var(--text);
+  }
+  .results-band {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 3px 10px;
+    border-radius: 3px;
+    margin-left: 12px;
+    vertical-align: middle;
+  }
+  .band-fail { background: var(--del-bg); color: var(--del); border: 1px solid var(--del-border); }
+  .band-pass { background: rgba(217,164,65,0.14); color: var(--hash); border: 1px solid rgba(217,164,65,0.4); }
+  .band-proficient { background: rgba(110,159,214,0.14); color: var(--accent); border: 1px solid rgba(110,159,214,0.4); }
+  .band-expert { background: var(--add-bg); color: var(--add); border: 1px solid var(--add-border); }
+
+  footer {
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 30px 0 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="prompt-line">
+    <span class="sigil">$</span>
+    <span class="cmd">git log --graph --exam="Git Proficiency" --author=</span>
+    <input type="text" id="examinee-name" placeholder="your.name" autocomplete="off">
+  </div>
+  <div id="name-error">error: --author cannot be empty. type your name to begin.</div>
+  <div class="graph-strip" id="graph-strip"></div>
+</div>
+
+<main>
+  <div id="questions-root"></div>
+
+  <div class="submit-bar">
+    <button class="primary" id="submit-btn">git commit -m "submit exam"</button>
+    <div id="retake-wrap" style="display:none;">
+      <button class="secondary" id="retake-btn">retake (new attempt)</button>
+    </div>
+  </div>
+
+  <div id="results-root"></div>
+
+  <footer>35 questions &middot; 100 pts total &middot; multiple-choice scored exactly, typed commands pattern-matched against accepted syntax &middot; graded locally in your browser, nothing is stored or sent anywhere</footer>
+</main>
+
+<script>
+const QUESTIONS = [
+  // ---- Fundamentals ----
+  { id:1, hash:"a3f9c1", section:"Fundamentals", type:"single", points:2,
+    prompt:"Git is fundamentally a ______ version control system.",
+    options:["Centralized","Distributed","Federated","Client-only"], correct:[1] },
+  { id:2, hash:"e71bd4", section:"Fundamentals", type:"single", points:2,
+    prompt:"Which command renders commit history as a branch/merge graph across ALL branches?",
+    options:["git log","git log --oneline","git log --graph --all","git status"], correct:[2] },
+  { id:3, hash:"0c5a2f", section:"Fundamentals", type:"multi", points:2,
+    prompt:"Which of these live inside .git/? (select all that apply)",
+    options:["Commit objects","Branch refs","Staging index","Compiled build binaries"], correct:[0,1,2] },
+  { id:4, hash:"9d21ee", section:"Fundamentals", type:"single", points:2,
+    prompt:"You initialized Git in the wrong directory. What safely removes Git tracking without deleting your files?",
+    options:["git reset --hard","rm -rf .git","git branch -D main","git clean -fd"], correct:[1] },
+  { id:26, hash:"71c4a9", section:"Fundamentals", type:"type", points:5,
+    prompt:"Type the command to view the last 5 commits in one-line format.",
+    placeholder:"git ...", canonical:"git log --oneline -5",
+    validate: s => /git log/.test(s) && /--oneline|--pretty=oneline/.test(s) && /(-5\b)|(-n\s*5\b)|(--max-count[=\s]*5\b)/.test(s) },
+  { id:27, hash:"2d88f0", section:"Fundamentals", type:"type", points:5,
+    prompt:"Type the command to initialize a new Git repository in the current directory.",
+    placeholder:"git ...", canonical:"git init",
+    validate: s => /\bgit init\b/.test(s) },
+
+  // ---- Branching ----
+  { id:5, hash:"44b7a0", section:"Branching", type:"single", points:2,
+    prompt:"What's the difference between git branch -d and git branch -D?",
+    options:["No difference","-d force-deletes, -D is safe","-d is a safe delete that refuses unmerged branches, -D force-deletes","-D only deletes remote branches"], correct:[2] },
+  { id:6, hash:"7f0c33", section:"Branching", type:"single", points:2,
+    prompt:"Which command pushes a new local branch and sets upstream tracking, in one shot?",
+    options:["git push origin","git push -u origin <branch>","git push --force","git push --all"], correct:[1] },
+  { id:28, hash:"b1e05d", section:"Branching", type:"type", points:5,
+    prompt:"Type the single command to create and switch to a new branch called feature/logging.",
+    placeholder:"git ...", canonical:"git checkout -b feature/logging",
+    validate: s => (/git checkout -b/.test(s) || /git switch -c/.test(s)) && /feature\/logging/.test(s) },
+
+  // ---- Remotes & Collaboration ----
+  { id:7, hash:"1e8d56", section:"Remotes & Collaboration", type:"single", points:2,
+    prompt:"What's the core difference between git fetch and git pull?",
+    options:["They're identical","fetch downloads without merging, pull = fetch + merge","pull only works on remote branches","fetch modifies your working directory, pull does not"], correct:[1] },
+  { id:8, hash:"b62f19", section:"Remotes & Collaboration", type:"single", points:2,
+    prompt:"git pull fails with \"fatal: refusing to merge unrelated histories.\" What resolves it?",
+    options:["git pull --force","git pull --allow-unrelated-histories","git merge --abort","git reset --hard origin/main"], correct:[1] },
+  { id:9, hash:"cf3a08", section:"Remotes & Collaboration", type:"multi", points:2,
+    prompt:"Which are legitimate reasons to require a Pull Request before merging to main on a production infra repo? (select all)",
+    options:["Peer review before prod-impacting changes","CI gate enforcement","Audit trail","It hides commits from history"], correct:[0,1,2] },
+  { id:10, hash:"53a9dd", section:"Remotes & Collaboration", type:"single", points:2,
+    prompt:"What's the difference between a fork and a clone?",
+    options:["They're the same thing","A fork is a full copy under a different owner/namespace; a clone is just a local copy","Cloning requires GitHub, forking doesn't","A fork only copies the default branch"], correct:[1] },
+  { id:29, hash:"6a0f2b", section:"Remotes & Collaboration", type:"type", points:5,
+    prompt:"Type the command to add a remote named origin pointing to git@github.com:org/repo.git",
+    placeholder:"git ...", canonical:"git remote add origin git@github.com:org/repo.git",
+    validate: s => /git remote add/.test(s) && /\borigin\b/.test(s) && /(\.git|github\.com)/.test(s) },
+  { id:30, hash:"9c317e", section:"Remotes & Collaboration", type:"type", points:5,
+    prompt:"Type the command to clone a repository into a directory named infra instead of the default name.",
+    placeholder:"git clone <url> ...", canonical:"git clone <url> infra",
+    validate: s => /git clone/.test(s) && /\binfra\b/.test(s) },
+
+  // ---- Rebase & Cherry-Pick ----
+  { id:11, hash:"6d10c7", section:"Rebase & Cherry-Pick", type:"single", points:2,
+    prompt:"What's the core difference between git merge and git rebase?",
+    options:["No real difference","Merge preserves both histories via a merge commit; rebase replays commits onto a new base and rewrites hashes","Rebase only works on remote branches","Merge always fails on conflicts, rebase never does"], correct:[1] },
+  { id:12, hash:"2a77f5", section:"Rebase & Cherry-Pick", type:"single", points:2,
+    prompt:"Why should you avoid rebasing a shared/public branch?",
+    options:["It's slower than merging","It rewrites commit hashes, breaking history for anyone who already pulled the originals","Rebase can't handle merge conflicts","It permanently deletes the branch"], correct:[1] },
+  { id:13, hash:"8e4b91", section:"Rebase & Cherry-Pick", type:"single", points:2,
+    prompt:"In interactive rebase, what's the difference between squash and fixup?",
+    options:["No difference","squash keeps the commit message for editing, fixup discards it","fixup deletes the commit entirely","squash only works on the first commit in the list"], correct:[1] },
+  { id:14, hash:"f019ac", section:"Rebase & Cherry-Pick", type:"single", points:2,
+    prompt:"True or False: cherry-picking a commit produces a brand-new commit hash, even if the resulting diff is identical to the original.",
+    options:["True","False"], correct:[0] },
+  { id:15, hash:"3bd6e2", section:"Rebase & Cherry-Pick", type:"multi", points:2,
+    prompt:"A cherry-pick hits a conflict. Besides aborting, what are your real options? (select all)",
+    options:["Resolve manually, then git cherry-pick --continue","Skip that commit with git cherry-pick --skip","Force it through with a --force flag","Delete the target branch"], correct:[0,1] },
+  { id:31, hash:"d40b7c", section:"Rebase & Cherry-Pick", type:"type", points:5,
+    prompt:"Type the command to rebase your current branch onto the latest main.",
+    placeholder:"git ...", canonical:"git rebase main",
+    validate: s => /git rebase\s+main\b/.test(s) && !/-i\b/.test(s) },
+  { id:32, hash:"1f6c8a", section:"Rebase & Cherry-Pick", type:"type", points:5,
+    prompt:"Type the command to start an interactive rebase for the last 4 commits.",
+    placeholder:"git ...", canonical:"git rebase -i HEAD~4",
+    validate: s => /git rebase/.test(s) && /-i\b/.test(s) && /head~4/.test(s) },
+  { id:33, hash:"5e29d1", section:"Rebase & Cherry-Pick", type:"type", points:5,
+    prompt:"Type the command to cherry-pick commit abc1234 onto your current branch.",
+    placeholder:"git ...", canonical:"git cherry-pick abc1234",
+    validate: s => /git cherry-pick/.test(s) && /abc1234/.test(s) },
+
+  // ---- Reset / Revert / Stash / Reflog ----
+  { id:16, hash:"d5f8a3", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"Which reset mode moves HEAD but leaves your changes staged?",
+    options:["--hard","--mixed","--soft","--merge"], correct:[2] },
+  { id:17, hash:"90c1bb", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"Which reset mode discards all changes in both staging and working directory?",
+    options:["--soft","--mixed","--hard","--keep"], correct:[2] },
+  { id:18, hash:"4e2d70", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"Incident: you ran git reset --hard HEAD~3 on a shared branch before pushing. How do you recover the 3 lost commits?",
+    options:["They're gone permanently","Find the pre-reset hash via git reflog, then git reset --hard <hash>","Re-clone the repo from origin","Run git revert HEAD~3"], correct:[1] },
+  { id:19, hash:"c73f5e", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"By default, how long do reflog entries persist before they're eligible for garbage collection?",
+    options:["7 days","24 hours","~90 days for reachable commits, 30 days for unreachable","Never — reflog entries are permanent"], correct:[2] },
+  { id:20, hash:"12ab9f", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"Why is git revert generally safer than git reset on a shared/production branch?",
+    options:["revert is faster to type","revert creates a new commit that undoes changes without rewriting existing history","revert doesn't need a commit message","reset always requires a force-push, revert never does"], correct:[1] },
+  { id:21, hash:"7ac340", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"What's the difference between git stash apply and git stash pop?",
+    options:["No difference","apply restores changes and keeps the stash in the list; pop restores and removes it from the list","pop only works on the oldest stash","apply permanently deletes uncommitted changes"], correct:[1] },
+  { id:22, hash:"e08d2c", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"You have 3 stashes and need to restore specifically the second one, stash@{1}. Which command is correct?",
+    options:["git stash apply","git stash apply stash@{1}","git stash pop --index 1","git stash restore 1"], correct:[1] },
+  { id:23, hash:"5f91a6", section:"Reset / Revert / Stash / Reflog", type:"multi", points:2,
+    prompt:"Which of these are core Git internal object types? (select all)",
+    options:["Blob","Tree","Commit","Index"], correct:[0,1,2] },
+  { id:24, hash:"a640d1", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"Incident: a teammate force-pushed and overwrote 2 days of commits on main. You have a local clone that was up to date before the force-push. What's the safest first move?",
+    options:["Immediately run git pull to sync","Run git reflog on your local main to find the last-known-good commit before touching anything else","Delete your local repo and re-clone","Run git push --force yourself to restore it"], correct:[1] },
+  { id:25, hash:"bd317c", section:"Reset / Revert / Stash / Reflog", type:"single", points:2,
+    prompt:"What is a Git \"ref\"?",
+    options:["A file storing binary diffs","A human-readable pointer to a commit hash — a branch, tag, or HEAD","A synonym for a commit message","A remote-only concept that doesn't exist locally"], correct:[1] },
+  { id:34, hash:"03d9f2", section:"Reset / Revert / Stash / Reflog", type:"type", points:5,
+    prompt:"Type the command to view the reflog.",
+    placeholder:"git ...", canonical:"git reflog",
+    validate: s => /\bgit reflog\b/.test(s) },
+  { id:35, hash:"88e1c6", section:"Reset / Revert / Stash / Reflog", type:"type", points:5,
+    prompt:"Type the command to revert commit abc1234 without it auto-committing (so you can review the change first).",
+    placeholder:"git ...", canonical:"git revert --no-commit abc1234",
+    validate: s => /git revert/.test(s) && (/--no-commit/.test(s) || /(^|\s)-n(\s|$)/.test(s)) && /abc1234/.test(s) }
+];
+
+const TOTAL = QUESTIONS.reduce((sum,q)=>sum+q.points,0);
+
+let selections = {};
+let graded = false;
+
+function normalize(s) { return (s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+
+function bandFor(score) {
+  if (score < 50) return { label: "Fail", cls: "band-fail" };
+  if (score < 70) return { label: "Pass", cls: "band-pass" };
+  if (score < 85) return { label: "Proficient", cls: "band-proficient" };
+  return { label: "Expert", cls: "band-expert" };
+}
+
+function renderGraphStrip() {
+  const strip = document.getElementById('graph-strip');
+  strip.innerHTML = '';
+  QUESTIONS.forEach(q => {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.id = `dot-${q.id}`;
+    d.title = `Q${q.id}`;
+    d.addEventListener('click', () => {
+      document.getElementById(`q-${q.id}`).scrollIntoView({behavior:'smooth', block:'center'});
+    });
+    strip.appendChild(d);
+  });
+}
+
+function renderQuestions() {
+  const root = document.getElementById('questions-root');
+  root.innerHTML = '';
+  let lastSection = null;
+  QUESTIONS.forEach(q => {
+    if (q.section !== lastSection) {
+      const div = document.createElement('div');
+      div.className = 'section-divider';
+      div.textContent = q.section;
+      root.appendChild(div);
+      lastSection = q.section;
+    }
+
+    const block = document.createElement('div');
+    block.className = 'commit-block';
+    block.id = `q-${q.id}`;
+
+    const hashLine = document.createElement('div');
+    hashLine.innerHTML = `<span class="commit-hash">${q.hash}</span><span class="commit-points">${q.points} pts</span>`;
+    block.appendChild(hashLine);
+
+    const prompt = document.createElement('div');
+    prompt.className = 'commit-prompt';
+    prompt.textContent = q.prompt;
+    block.appendChild(prompt);
+
+    if (q.type === 'multi') {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = '# select all that apply';
+      block.appendChild(hint);
+    }
+    if (q.type === 'type') {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = '# type the exact git command';
+      block.appendChild(hint);
+    }
+
+    if (q.type === 'single' || q.type === 'multi') {
+      q.options.forEach((opt, idx) => {
+        const line = document.createElement('label');
+        line.className = 'option-line';
+        line.id = `opt-${q.id}-${idx}`;
+
+        const input = document.createElement('input');
+        input.type = q.type === 'multi' ? 'checkbox' : 'radio';
+        input.name = `q-${q.id}`;
+        input.value = idx;
+        input.addEventListener('change', () => handleSelect(q, idx));
+
+        const gutter = document.createElement('span');
+        gutter.className = 'gutter';
+        gutter.textContent = ' ';
+
+        const text = document.createElement('span');
+        text.textContent = opt;
+
+        line.appendChild(input);
+        line.appendChild(gutter);
+        line.appendChild(text);
+        block.appendChild(line);
+      });
+    } else if (q.type === 'type') {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'type-input';
+      input.id = `typein-${q.id}`;
+      input.placeholder = q.placeholder || 'git ...';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.addEventListener('input', () => {
+        selections[q.id] = input.value;
+        const dot = document.getElementById(`dot-${q.id}`);
+        dot.classList.toggle('answered', input.value.trim().length > 0);
+      });
+      block.appendChild(input);
+
+      const reveal = document.createElement('div');
+      reveal.className = 'canonical-answer';
+      reveal.id = `canonical-${q.id}`;
+      reveal.style.display = 'none';
+      block.appendChild(reveal);
+    }
+
+    root.appendChild(block);
+  });
+}
+
+function handleSelect(q, idx) {
+  if (graded) return;
+  if (!selections[q.id]) selections[q.id] = [];
+  const sel = selections[q.id];
+
+  if (q.type === 'single') {
+    selections[q.id] = [idx];
+    q.options.forEach((_, i) => {
+      document.getElementById(`opt-${q.id}-${i}`).classList.toggle('selected', i === idx);
+    });
+  } else {
+    const pos = sel.indexOf(idx);
+    if (pos >= 0) sel.splice(pos, 1); else sel.push(idx);
+    document.getElementById(`opt-${q.id}-${idx}`).classList.toggle('selected', sel.includes(idx));
+  }
+
+  const dot = document.getElementById(`dot-${q.id}`);
+  const answered = (selections[q.id] || []).length > 0;
+  dot.classList.toggle('answered', answered);
+}
+
+function disableInputs() {
+  document.querySelectorAll('#questions-root input').forEach(i => { i.disabled = true; });
+  document.querySelectorAll('.option-line').forEach(l => l.classList.add('disabled'));
+}
+
+function gradeExam() {
+  const nameInput = document.getElementById('examinee-name');
+  const name = nameInput.value.trim();
+  const errEl = document.getElementById('name-error');
+  if (!name) {
+    errEl.style.display = 'block';
+    nameInput.focus();
+    return;
+  }
+  errEl.style.display = 'none';
+
+  let score = 0;
+
+  QUESTIONS.forEach(q => {
+    if (q.type === 'single' || q.type === 'multi') {
+      const sel = selections[q.id] || [];
+      const correct = q.correct;
+      const isCorrect = sel.length === correct.length && sel.every(i => correct.includes(i));
+      if (isCorrect) score += q.points;
+
+      q.options.forEach((_, idx) => {
+        const el = document.getElementById(`opt-${q.id}-${idx}`);
+        const gutter = el.querySelector('.gutter');
+        if (correct.includes(idx)) { el.classList.add('correct'); gutter.textContent = '+'; }
+        else if (sel.includes(idx)) { el.classList.add('wrong'); gutter.textContent = '-'; }
+        else { gutter.textContent = ' '; }
+      });
+
+      const dot = document.getElementById(`dot-${q.id}`);
+      dot.classList.remove('answered');
+      dot.classList.add(isCorrect ? 'correct' : 'wrong');
+
+    } else if (q.type === 'type') {
+      const raw = selections[q.id] || '';
+      const norm = normalize(raw);
+      const isCorrect = norm.length > 0 && q.validate(norm);
+      if (isCorrect) score += q.points;
+
+      const inputEl = document.getElementById(`typein-${q.id}`);
+      inputEl.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const reveal = document.getElementById(`canonical-${q.id}`);
+      reveal.style.display = 'block';
+      reveal.innerHTML = `<span class="label">accepted:</span> ${escapeHtml(q.canonical)}`;
+
+      const dot = document.getElementById(`dot-${q.id}`);
+      dot.classList.remove('answered');
+      dot.classList.add(isCorrect ? 'correct' : 'wrong');
+    }
+  });
+
+  graded = true;
+  disableInputs();
+  nameInput.disabled = true;
+  document.getElementById('submit-btn').style.display = 'none';
+  document.getElementById('retake-wrap').style.display = 'block';
+
+  const band = bandFor(score);
+  const resultsRoot = document.getElementById('results-root');
+  resultsRoot.innerHTML = `
+    <div class="results-panel">
+      <div><span class="results-score">${score}/${TOTAL}</span><span class="results-band ${band.cls}">${band.label}</span></div>
+      <div style="font-family:var(--mono); font-size:12px; color:var(--text-muted); margin-top:10px;">
+        ${escapeHtml(name)}'s result &middot; typed commands are pattern-matched, not shell-executed — worth a manual glance for anyone near a threshold &middot; nothing here is saved, screenshot if you need a record
+      </div>
+    </div>
+  `;
+  resultsRoot.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function retake() {
+  selections = {};
+  graded = false;
+  document.getElementById('examinee-name').disabled = false;
+  document.getElementById('examinee-name').value = '';
+  document.getElementById('submit-btn').style.display = 'inline-block';
+  document.getElementById('retake-wrap').style.display = 'none';
+  document.getElementById('results-root').innerHTML = '';
+  renderGraphStrip();
+  renderQuestions();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+document.getElementById('submit-btn').addEventListener('click', gradeExam);
+document.getElementById('retake-btn').addEventListener('click', retake);
+
+renderGraphStrip();
+renderQuestions();
+</script>
+
+</body>
+</html>
