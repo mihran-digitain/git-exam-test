@@ -64,7 +64,6 @@
     min-width: 160px;
   }
   .prompt-line input:focus { outline: 1px solid var(--accent); }
-  #name-error { color: var(--del); font-size: 12px; font-family: var(--mono); display: none; }
 
   .graph-strip {
     display: flex;
@@ -254,7 +253,6 @@
     <span class="cmd">git log --graph --exam="Git Proficiency" --author=</span>
     <input type="text" id="examinee-name" placeholder="your.name" autocomplete="off">
   </div>
-  <div id="name-error">error: --author cannot be empty. type your name to begin.</div>
   <div class="graph-strip" id="graph-strip"></div>
 </div>
 
@@ -262,7 +260,7 @@
   <div id="questions-root"></div>
 
   <div class="submit-bar">
-    <button class="primary" id="submit-btn">git commit -m "submit exam"</button>
+    <button class="primary" id="submit-btn">Finish Exam</button>
     <div id="retake-wrap" style="display:none;">
       <button class="secondary" id="retake-btn">retake (new attempt)</button>
     </div>
@@ -547,14 +545,7 @@ function disableInputs() {
 
 function gradeExam() {
   const nameInput = document.getElementById('examinee-name');
-  const name = nameInput.value.trim();
-  const errEl = document.getElementById('name-error');
-  if (!name) {
-    errEl.style.display = 'block';
-    nameInput.focus();
-    return;
-  }
-  errEl.style.display = 'none';
+  const name = nameInput.value.trim() || 'Anonymous';
 
   let score = 0;
 
