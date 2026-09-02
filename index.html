@@ -325,7 +325,7 @@ const QUESTIONS = [
     placeholder:"git ...", canonical:"git remote add origin git@github.com:org/repo.git",
     validate: s => /git remote add/.test(s) && /\borigin\b/.test(s) && /(\.git|github\.com)/.test(s) },
   { id:30, hash:"9c317e", section:"Remotes & Collaboration", type:"type", points:5,
-    prompt:"Type the command to clone a repository into a directory named infra instead of the default name.",
+    prompt:"Type the command to clone git@github.com:org/repo.git into a directory named infra instead of the default name.",
     placeholder:"git clone <url> ...", canonical:"git clone <url> infra",
     validate: s => /git clone/.test(s) && /\binfra\b/.test(s) },
 
@@ -346,7 +346,7 @@ const QUESTIONS = [
     prompt:"A cherry-pick hits a conflict. Besides aborting, what are your real options? (select all)",
     options:["Resolve manually, then git cherry-pick --continue","Skip that commit with git cherry-pick --skip","Force it through with a --force flag","Delete the target branch"], correct:[0,1] },
   { id:31, hash:"d40b7c", section:"Rebase & Cherry-Pick", type:"type", points:5,
-    prompt:"Type the command to rebase your current branch onto the latest main.",
+    prompt:"Type the command to rebase branch test onto the latest main.",
     placeholder:"git ...", canonical:"git rebase main",
     validate: s => /git rebase\s+main\b/.test(s) && !/-i\b/.test(s) },
   { id:32, hash:"1f6c8a", section:"Rebase & Cherry-Pick", type:"type", points:5,
@@ -354,7 +354,7 @@ const QUESTIONS = [
     placeholder:"git ...", canonical:"git rebase -i HEAD~4",
     validate: s => /git rebase/.test(s) && /-i\b/.test(s) && /head~4/.test(s) },
   { id:33, hash:"5e29d1", section:"Rebase & Cherry-Pick", type:"type", points:5,
-    prompt:"Type the command to cherry-pick commit abc1234 onto your current branch.",
+    prompt:"Type the command to cherry-pick commit abc1234 onto branch test.",
     placeholder:"git ...", canonical:"git cherry-pick abc1234",
     validate: s => /git cherry-pick/.test(s) && /abc1234/.test(s) },
 
